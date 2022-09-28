@@ -5,6 +5,10 @@ name = "pypi"
 
 [packages]
 django = "*"
+ccxt = "*"
+ta = "*"
+pandas = "*"
+pymongo = "*"
 
 [dev-packages]
 

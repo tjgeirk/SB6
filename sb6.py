@@ -32,6 +32,18 @@ exchange = ccxt.kucoinfutures({
     'password': API_PASSWD
 })
 
+def getData(coin, tf):
+    data = exchange.fetch_ohlcv(coin, timeframe=tf, limit=500)
+    df = {}
+    for i, col in enumerate(['date', 'open', 'high', 'low', 'close', 'volume']):
+        df[col] = []
+        for row in data:
+            if col == 'date':
+                df[col].append(datetime.datetime.fromtimestamp(row[i]/1000))
+            else:
+                df[col].append(row[i])
+        DF = dataframe(df)
+    return DF
 
 def hashi(df):
     hashi_df = dataframe(index=df.index.values, columns=[
@@ -51,38 +63,26 @@ def hashi(df):
         'open', 'close']].join(df['low']).min(axis=1)
     return hashi_df
 
+def rsi(c, w):
+    rsi =  momentum.rsi(c, w).iloc[-1]
+    return rsi
 
-def getData(coin, tf):
-    data = exchange.fetch_ohlcv(coin, timeframe=tf, limit=500)
-    df = {}
-    for i, col in enumerate(['date', 'open', 'high', 'low', 'close', 'volume']):
-        df[col] = []
-        for row in data:
-            if col == 'date':
-                df[col].append(datetime.datetime.fromtimestamp(row[i]/1000))
-            else:
-                df[col].append(row[i])
-        DF = dataframe(df)
-    return DF
-
-
-def rsi(w):
-    return momentum.rsi(candles['close'], w).iloc[-1]
-
-
-def sma(w):
-    return trend.sma_indicator(candles['close'], w).iloc[-1]
-
+def sma(c, w):
+    sma = trend.sma_indicator(c, w).iloc[-1]
+    return sma
 
 class kc:
-    def h():
-        return volatility.keltner_channel_hband_indicator()(
-            candles['high'], candles['low'], candles['close'], 20, 10, False, False).iloc[-1]
+    def h(h, l, c, w):
+        h = volatility.keltner_channel_hband_indicator()(
+            h, l, c, w, 10, False, False).iloc[-1]
+        print(h)
+        return h
 
-    def l():
-        return volatility.keltner_channel_lband_indicator()(
-            candles['high'], candles['low'], candles['close'], 20, 10, False, False).iloc[-1]
-
+    def l(h, l, c, w):
+        l = volatility.keltner_channel_lband_indicator()(
+            h, l, c, w, 10, False, False).iloc[-1]
+        print(l)
+        return l
 
 class order:
     def buy():
@@ -120,6 +120,7 @@ while True:
         side = 'none'
         pnl = 0
         contracts = 0
+
     if side == 'none':
         ttc = ttc + 1
         if ttc >= len(tfs):
@@ -130,46 +131,48 @@ while True:
             coinName = cc[ccc]
         tf = tc[ttc]
     coin = str(f'{coinName}/USDT:USDT')
-    print(f'{coin}: SIDE: {side}, CONTRACTS: {contracts}, PNL: {pnl}, TOTAL: {balance} -- Scanning for signals at timeframe {tf}...')
 
     try:
         candles = hashi(getData(coin, tf))
-    except:
+    except Exception as e:
+        print(e)
         time.sleep(25)
         candles = hashi(getData(coin, tf))
     candles = candles.iloc[1:len(candles)-1].copy().reset_index(drop=True)
-    O = candles['open']
-    C = candles['close']
-    green = C.iloc[-1] > O.iloc[-1] or C.iloc[-2] > O.iloc[-2]
-    red = C.iloc[-1] < O.iloc[-1] or C.iloc[-2] < O.iloc[-2]
-    high = candles['high'].iloc[-1] or candles['high'].iloc[-2]
-    low = candles['low'].iloc[-1] or candles['low'].iloc[-2]
-    close = C.iloc[-1]
 
+    o = getData(coin, tf)['open']
+    c = getData(coin, tf)['close']
+    h = getData(coin, tf)['high']
+    l = getData(coin, tf)['low']
+    close = candles['close'].iloc[-1]
+    open = candles['open'].iloc[-1]
+    green = open < close
+    red = open > close
+    print(f'{coin}: SIDE: {side}, CONTRACTS: {contracts}, PNL: {pnl}, TOTAL: {balance} -- Scanning for signals at timeframe {tf}...')
     try:
         if pnl > takeProfit or pnl < stopLoss:
             print(f'stop-limit {pnl}')
             if side == 'long':
                 order.sell()
-            elif side == 'short':
+            if side == 'short':
                 order.buy()
             time.sleep(30)
 
-        if close > sma(200):
+        if close > sma(c, 200):
             print('Looking for buy signals')
-            if (rsi(14) < 30 and kc.l()) or sma(2) > sma(3) > sma(5):
-                order.buy
+            if (rsi(c, 14) < 30 and kc.l(h, l, c, 20)) or sma(c, 2) > sma(c, 3) > sma(c, 5):
+                order.buy()
             if side == 'long' and (
-                    (rsi(14) > 70 and kc.h()) or sma(2) < sma(3) < sma(5)):
-                order.sell
+                    (rsi(c, 14) > 70 and kc.h(h, l, c, 20)) or sma(c, 2) < sma(c, 3) < sma(c, 5)):
+                order.sell()
 
-        elif close < sma(200):
+        if close < sma(c, 200):
             print('Looking for sell signals')
-            if (rsi(14) > 70 and kc.h()) or sma(2) < sma(3) < sma(5):
-                order.sell
+            if (rsi(c, 14) > 70 and kc.h(h, l, c, 20)) or sma(c, 2) < sma(c, 3) < sma(c, 5):
+                order.sell()
             if side == 'short' and (
-                    (rsi(14) < 30 and kc.l()) or sma(2) > sma(3) > sma(5)):
-                order.buy
+                    (rsi(c, 14) < 30 and kc.l(h, l, c, 20)) or sma(c, 2) > sma(c, 3) > sma(c, 5)):
+                order.buy()
 
     except Exception as e:
         print(e)
