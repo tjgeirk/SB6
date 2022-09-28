@@ -4,7 +4,7 @@ import ccxt
 import time
 import datetime
 API_KEY = ''
-API_SECRET = ''
+API_SECRET =''
 API_PASSWD = ''
 
 coins = ['ADA', 'APE', 'BTC', 'ETC', 'ETH', 'LUNA', 'LUNC']
@@ -18,10 +18,10 @@ takeProfit = 5
 
 tc = dict(enumerate(tfs, 0))
 ttc = int(len(tfs)-1)
-tf = tc[ttc]
+tf = tc[0]
 cc = dict(enumerate(coins, 0))
 ccc = int(len(coins)-1)
-coinName = cc[ccc]
+coinName = cc[0]
 side = 'none'
 stopLoss = int(-abs(stopLoss))
 takeprofit = int(abs(takeProfit))
@@ -122,14 +122,14 @@ while True:
         contracts = 0
 
     if side == 'none':
-        ttc = ttc + 1
-        if ttc >= len(tfs):
-            ttc = 0
-            ccc = ccc + 1
-            if ccc >= len(coins):
-                ccc = 0
-            coinName = cc[ccc]
-        tf = tc[ttc]
+        ccc = ccc+1
+        if ccc >= len(coins):
+            ccc = 0
+            ttc = ttc +1
+            if ttc >= len(tfs):
+                ttc = 0
+            tf = tc[ttc]
+        coinName = cc[ccc]
     coin = str(f'{coinName}/USDT:USDT')
 
     try:
