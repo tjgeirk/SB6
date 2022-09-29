@@ -4,15 +4,15 @@ import ccxt
 import time
 import datetime
 API_KEY = ''
-API_SECRET =''
+API_SECRET = ''
 API_PASSWD = ''
 
-coins = ['ADA', 'APE', 'BTC', 'ETC', 'ETH', 'LUNA', 'LUNC']
+coins = ['APE', 'ETH', 'LUNA', 'LUNC']
 tfs = ['5m', '15m', '30m', '1h', '2h', '4h']
 lotsPerTrade = 1
-leverage = 20
+leverage = 5
 stopLoss = -10
-takeProfit = 5
+takeProfit = 10
 
 ## end of config ##
 
@@ -32,6 +32,7 @@ exchange = ccxt.kucoinfutures({
     'password': API_PASSWD
 })
 
+
 def getData(coin, tf):
     data = exchange.fetch_ohlcv(coin, timeframe=tf, limit=500)
     df = {}
@@ -44,6 +45,7 @@ def getData(coin, tf):
                 df[col].append(row[i])
         DF = dataframe(df)
     return DF
+
 
 def hashi(df):
     hashi_df = dataframe(index=df.index.values, columns=[
@@ -63,13 +65,16 @@ def hashi(df):
         'open', 'close']].join(df['low']).min(axis=1)
     return hashi_df
 
+
 def rsi(c, w):
-    rsi =  momentum.rsi(c, w).iloc[-1]
+    rsi = momentum.rsi(c, w).iloc[-1]
     return rsi
+
 
 def sma(c, w):
     sma = trend.sma_indicator(c, w).iloc[-1]
     return sma
+
 
 class kc:
     def h(h, l, c, w):
@@ -83,6 +88,7 @@ class kc:
             h, l, c, w, 10, False, False).iloc[-1]
         print(l)
         return l
+
 
 class order:
     def buy():
@@ -112,6 +118,7 @@ while True:
         exchange.fetch_balance()['info']['data']['accountEquity'], 2)
     positions = exchange.fetch_positions()
     try:
+        coin = positions[0]['symbol']
         contracts = positions[0]['contracts']
         side = positions[0]['side']
         pnl = positions[0]['percentage']
@@ -120,12 +127,10 @@ while True:
         side = 'none'
         pnl = 0
         contracts = 0
-
-    if side == 'none':
         ccc = ccc+1
         if ccc >= len(coins):
             ccc = 0
-            ttc = ttc +1
+            ttc = ttc + 1
             if ttc >= len(tfs):
                 ttc = 0
             tf = tc[ttc]
@@ -150,13 +155,17 @@ while True:
     red = open > close
     print(f'{coin}: SIDE: {side}, CONTRACTS: {contracts}, PNL: {pnl}, TOTAL: {balance} -- Scanning for signals at timeframe {tf}...')
     try:
-        if pnl > takeProfit or pnl < stopLoss:
+        while pnl > takeProfit or pnl < stopLoss:
             print(f'stop-limit {pnl}')
             if side == 'long':
+                exchange.cancel_all_orders()
                 order.sell()
             if side == 'short':
+                exchange.cancel_all_orders()
                 order.buy()
             time.sleep(30)
+            if side == 'none':
+                break
 
         if close > sma(c, 200):
             print('Looking for buy signals')
@@ -164,6 +173,7 @@ while True:
                 order.buy()
             if side == 'long' and (
                     (rsi(c, 14) > 70 and kc.h(h, l, c, 20)) or sma(c, 2) < sma(c, 3) < sma(c, 5)):
+                exchange.cancel_all_orders()
                 order.sell()
 
         if close < sma(c, 200):
@@ -172,8 +182,10 @@ while True:
                 order.sell()
             if side == 'short' and (
                     (rsi(c, 14) < 30 and kc.l(h, l, c, 20)) or sma(c, 2) > sma(c, 3) > sma(c, 5)):
+                exchange.cancel_all_orders()
                 order.buy()
 
     except Exception as e:
+        exchange.cancel_all_orders()
         print(e)
         time.sleep(5)
