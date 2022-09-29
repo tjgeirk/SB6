@@ -9,7 +9,7 @@ API_SECRET = ''
 API_PASSWD = ''
 
 coins = ['APE', 'ETH', 'LUNA', 'LUNC']
-tfs = ['5m', '15m', '30m', '1h', '2h', '4h']
+tfs = ['1m', '5m', '15m', '30m', '1h']
 lotsPerTrade = 1
 leverage = 5
 stopLoss = -10
@@ -78,15 +78,13 @@ def sma(c, w):
 
 
 class bb:
-    def h(h, l, c, w):
-        h = volatility.bollinger_hband_indicator()(
-            h, l, c, w, 10, False, False).iloc[-1]
+    def h(c):
+        h = volatility.bollinger_hband_indicator(c).iloc[-1]
         print(h)
         return h
 
-    def l(h, l, c, w):
-        l = volatility.bollinger_lband_indicator()(
-            h, l, c, w, 10, False, False).iloc[-1]
+    def l(c):
+        l = volatility.bollinger_lband_indicator(c).iloc[-1]
         print(l)
         return l
 
@@ -190,12 +188,12 @@ while True:
         if close > sma(c, 200):
             print('Looking for buy signals')
 
-            if (rsi(c, 14) < 30 and bb.l(h, l, c, 20)
+            if (rsi(c, 14) < 30 and bb.l(c)
                 ) or sma(c, 2) > sma(c, 3) > sma(c, 5):
                 order.buy()
 
             if side == 'long' and (
-                    (rsi(c, 14) > 70 and bb.h(h, l, c, 20)
+                    (rsi(c, 14) > 70 and bb.h(c)
                      ) or sma(c, 2) < sma(c, 3) < sma(c, 5)):
                 exchange.cancel_all_orders()
                 order.sell()
@@ -203,12 +201,12 @@ while True:
         if close < sma(c, 200):
             print('Looking for sell signals')
 
-            if (rsi(c, 14) > 70 and bb.h(h, l, c, 20)
+            if (rsi(c, 14) > 70 and bb.h(c)
                 ) or sma(c, 2) < sma(c, 3) < sma(c, 5):
                 order.sell()
 
             if side == 'short' and (
-                    (rsi(c, 14) < 30 and bb.l(h, l, c, 20)
+                    (rsi(c, 14) < 30 and bb.l(c)
                      ) or sma(c, 2) > sma(c, 3) > sma(c, 5)):
                 exchange.cancel_all_orders()
                 order.buy()
