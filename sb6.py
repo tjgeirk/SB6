@@ -11,8 +11,8 @@ API_PASSWD = ''
 coins = ['APE', 'ETH', 'LUNA', 'LUNC']
 tfs = ['1m', '5m', '15m', '30m', '1h']
 lotsPerTrade = 1
-leverage = 5
-stopLoss = -10
+leverage = 10
+stopLoss = -5
 takeProfit = 10
 
 ## end of config ##
@@ -80,12 +80,10 @@ def sma(c, w):
 class bb:
     def h(c):
         h = volatility.bollinger_hband_indicator(c).iloc[-1]
-        print(h)
         return h
 
     def l(c):
         l = volatility.bollinger_lband_indicator(c).iloc[-1]
-        print(l)
         return l
 
 
@@ -102,7 +100,9 @@ class order:
             qty = lotsPerTrade
             params = {'leverage': leverage}
 
-        return exchange.create_limit_buy_order(coin, qty, bid, params=params)
+        placeOrder = exchange.create_limit_buy_order(
+            coin, qty, bid, params=params)
+        return placeOrder
 
     def sell():
         ask = exchange.fetch_order_book(coin)['asks'][0][0]
@@ -115,7 +115,9 @@ class order:
             qty = lotsPerTrade
             params = {'leverage': leverage}
 
-        return exchange.create_limit_sell_order(coin, qty, ask, params=params)
+        placeOrder = exchange.create_limit_sell_order(
+            coin, qty, ask, params=params)
+        return placeOrder
 
 
 while True:
@@ -168,50 +170,51 @@ while True:
 
     print(f'{coin}: SIDE: {side}, CONTRACTS: {contracts}, PNL: {pnl}, TOTAL: {balance} -- Scanning for signals at timeframe {tf}...')
 
+    if green:
+        text = 'Green'
+    elif red:
+        text = 'Red'
+    if bb.h(c) == 1:
+        text = str(f'{text} / BB:H')
+    elif bb.l(c) == 1:
+        text = str(f'{text} / BB:L')
+    text = str(f'{text} / RSI:{round(rsi(c,14), 1)}')
+    if sma(c, 2) > sma(c, 3) > sma(c, 4):
+        text = str(f'{text} / UP')
+    elif sma(c, 2) < sma(c, 3) < sma(c, 4):
+        text = str(f'{text} / DOWN')
+    print(text)
+
     try:
 
         while pnl > takeProfit or pnl < stopLoss:
             print(f'stop-limit {pnl}')
-
             if side == 'long':
-                exchange.cancel_all_orders()
                 order.sell()
-
-            if side == 'short':
-                exchange.cancel_all_orders()
+            elif side == 'short':
                 order.buy()
-
-            time.sleep(30)
-            if side == 'none':
+            elif side == 'none':
+                exchange.cancel_all_orders()
                 break
-
         if close > sma(c, 200):
-            print('Looking for buy signals')
-
-            if (rsi(c, 14) < 30 and bb.l(c)
-                ) or sma(c, 2) > sma(c, 3) > sma(c, 5):
+            if (((rsi(c, 14) < 30) or green) and bb.l(c)) or (
+                    sma(c, 2) > sma(c, 3) > sma(c, 5) > sma(c, 8) > sma(c, 13)):
                 order.buy()
-
-            if side == 'long' and (
-                    (rsi(c, 14) > 70 and bb.h(c)
-                     ) or sma(c, 2) < sma(c, 3) < sma(c, 5)):
+            elif (((rsi(c, 14) > 70) or red) and bb.h(c)) or (
+                    sma(c, 2) < sma(c, 3) < sma(c, 5)) and side == 'long':
                 exchange.cancel_all_orders()
                 order.sell()
-
-        if close < sma(c, 200):
-            print('Looking for sell signals')
-
-            if (rsi(c, 14) > 70 and bb.h(c)
-                ) or sma(c, 2) < sma(c, 3) < sma(c, 5):
+            time.sleep(10)
+        elif close < sma(c, 200):
+            if (((rsi(c, 14) > 70) or red) and bb.h(c)) or (
+                    sma(c, 2) < sma(c, 3) < sma(c, 5) < sma(c, 8) < sma(c, 13)):
                 order.sell()
-
-            if side == 'short' and (
-                    (rsi(c, 14) < 30 and bb.l(c)
-                     ) or sma(c, 2) > sma(c, 3) > sma(c, 5)):
+            elif (((rsi(c, 14) < 30) or green) and bb.l(c)) or (
+                    sma(c, 2) > sma(c, 3) > sma(c, 5)) and side == 'short':
                 exchange.cancel_all_orders()
                 order.buy()
-
+            time.sleep(10)
     except Exception as e:
-        exchange.cancel_all_orders()
         print(e)
-        time.sleep(5)
+        time.sleep(30)
+        exchange.cancel_all_orders()
