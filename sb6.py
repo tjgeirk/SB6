@@ -92,24 +92,31 @@ class bb:
 
 
 class order:
+
     def buy():
         bid = exchange.fetch_order_book(coin)['bids'][0][0]
+
         if side == 'short':
             qty = contracts
             params = {'reduceOnly': True, 'closeOrder': True}
+
         else:
             qty = lotsPerTrade
             params = {'leverage': leverage}
+
         return exchange.create_limit_buy_order(coin, qty, bid, params=params)
 
     def sell():
         ask = exchange.fetch_order_book(coin)['asks'][0][0]
+
         if side == 'long':
             qty = contracts
             params = {'reduceOnly': True, 'closeOrder': True}
+
         else:
             qty = lotsPerTrade
             params = {'leverage': leverage}
+
         return exchange.create_limit_sell_order(coin, qty, ask, params=params)
 
 
@@ -118,20 +125,24 @@ while True:
     balance = round(
         exchange.fetch_balance()['info']['data']['accountEquity'], 2)
     positions = exchange.fetch_positions()
+
     try:
         coin = positions[0]['symbol']
         contracts = positions[0]['contracts']
         side = positions[0]['side']
         pnl = positions[0]['percentage']
         pnl = round(100*pnl, 2)
+
     except IndexError:
         side = 'none'
         pnl = 0
         contracts = 0
         ccc = ccc+1
+
         if ccc >= len(coins):
             ccc = 0
             ttc = ttc + 1
+
             if ttc >= len(tfs):
                 ttc = 0
             tf = tc[ttc]
@@ -140,10 +151,12 @@ while True:
 
     try:
         candles = hashi(getData(coin, tf))
+
     except Exception as e:
         print(e)
         time.sleep(25)
         candles = hashi(getData(coin, tf))
+
     candles = candles.iloc[1:len(candles)-1].copy().reset_index(drop=True)
 
     o = getData(coin, tf)['open']
@@ -154,25 +167,33 @@ while True:
     open = candles['open'].iloc[-1]
     green = open < close
     red = open > close
+
     print(f'{coin}: SIDE: {side}, CONTRACTS: {contracts}, PNL: {pnl}, TOTAL: {balance} -- Scanning for signals at timeframe {tf}...')
+
     try:
+
         while pnl > takeProfit or pnl < stopLoss:
             print(f'stop-limit {pnl}')
+
             if side == 'long':
                 exchange.cancel_all_orders()
                 order.sell()
+
             if side == 'short':
                 exchange.cancel_all_orders()
                 order.buy()
+
             time.sleep(30)
             if side == 'none':
                 break
 
         if close > sma(c, 200):
             print('Looking for buy signals')
+
             if (rsi(c, 14) < 30 and bb.l(h, l, c, 20)
-                    ) or sma(c, 2) > sma(c, 3) > sma(c, 5):
+                ) or sma(c, 2) > sma(c, 3) > sma(c, 5):
                 order.buy()
+
             if side == 'long' and (
                     (rsi(c, 14) > 70 and bb.h(h, l, c, 20)
                      ) or sma(c, 2) < sma(c, 3) < sma(c, 5)):
@@ -181,9 +202,11 @@ while True:
 
         if close < sma(c, 200):
             print('Looking for sell signals')
+
             if (rsi(c, 14) > 70 and bb.h(h, l, c, 20)
-                    ) or sma(c, 2) < sma(c, 3) < sma(c, 5):
+                ) or sma(c, 2) < sma(c, 3) < sma(c, 5):
                 order.sell()
+
             if side == 'short' and (
                     (rsi(c, 14) < 30 and bb.l(h, l, c, 20)
                      ) or sma(c, 2) > sma(c, 3) > sma(c, 5)):
