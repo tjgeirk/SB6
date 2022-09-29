@@ -3,6 +3,7 @@ from pandas import DataFrame as dataframe
 import ccxt
 import time
 import datetime
+
 API_KEY = ''
 API_SECRET = ''
 API_PASSWD = ''
@@ -76,15 +77,15 @@ def sma(c, w):
     return sma
 
 
-class kc:
+class bb:
     def h(h, l, c, w):
-        h = volatility.keltner_channel_hband_indicator()(
+        h = volatility.bollinger_hband_indicator()(
             h, l, c, w, 10, False, False).iloc[-1]
         print(h)
         return h
 
     def l(h, l, c, w):
-        l = volatility.keltner_channel_lband_indicator()(
+        l = volatility.bollinger_lband_indicator()(
             h, l, c, w, 10, False, False).iloc[-1]
         print(l)
         return l
@@ -169,19 +170,23 @@ while True:
 
         if close > sma(c, 200):
             print('Looking for buy signals')
-            if (rsi(c, 14) < 30 and kc.l(h, l, c, 20)) or sma(c, 2) > sma(c, 3) > sma(c, 5):
+            if (rsi(c, 14) < 30 and bb.l(h, l, c, 20)
+                    ) or sma(c, 2) > sma(c, 3) > sma(c, 5):
                 order.buy()
             if side == 'long' and (
-                    (rsi(c, 14) > 70 and kc.h(h, l, c, 20)) or sma(c, 2) < sma(c, 3) < sma(c, 5)):
+                    (rsi(c, 14) > 70 and bb.h(h, l, c, 20)
+                     ) or sma(c, 2) < sma(c, 3) < sma(c, 5)):
                 exchange.cancel_all_orders()
                 order.sell()
 
         if close < sma(c, 200):
             print('Looking for sell signals')
-            if (rsi(c, 14) > 70 and kc.h(h, l, c, 20)) or sma(c, 2) < sma(c, 3) < sma(c, 5):
+            if (rsi(c, 14) > 70 and bb.h(h, l, c, 20)
+                    ) or sma(c, 2) < sma(c, 3) < sma(c, 5):
                 order.sell()
             if side == 'short' and (
-                    (rsi(c, 14) < 30 and kc.l(h, l, c, 20)) or sma(c, 2) > sma(c, 3) > sma(c, 5)):
+                    (rsi(c, 14) < 30 and bb.l(h, l, c, 20)
+                     ) or sma(c, 2) > sma(c, 3) > sma(c, 5)):
                 exchange.cancel_all_orders()
                 order.buy()
 
