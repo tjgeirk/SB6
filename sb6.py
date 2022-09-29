@@ -135,7 +135,7 @@ while True:
                 ttc = 0
             tf = tc[ttc]
         coinName = cc[ccc]
-    coin = str(f'{coinName}/USDT:USDT')
+        coin = str(f'{coinName}/USDT:USDT')
 
     try:
         candles = hashi(getData(coin, tf))
