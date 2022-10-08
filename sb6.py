@@ -6,32 +6,17 @@ API_KEY = ''
 API_SECRET = ''
 API_PASSWD = ''
 
-# LISTS OF COINS AND TIMEFRAMES FOR MULTI-COIN SCANNING.
-# TO USE A STATIC TF OR COIN (OR BOTH), LEAVE ONLY ONE VALUE IN EACH LIST.
-coins = ['BTC', 'ETH', 'LUNA', 'LUNC', 'XLM']
-tfs = ['1m', '5m', '15m', '30m', '1h']
-
 # THESE ARE RATIOS, NOT PERCENTS. [ 1 = 100% ][ 0.05 = 5% ][ 0.1 = 10% ] ETC...
 stopLoss = -0.05
-takeProfit = 0.1
+takeProfit = 1
 
-# REFER TO EXCHANGE FOR PRICES PER LOT. BOT USES D.C.A. ENTRY, SO THIS IS NOT THE TOTAL POSITION SIZE, ONLY THE NUMBER OF LOTS TO BUY/SHORT *AT A TIME*
-# APPLIES ONLY TO OPENING POSITIONS. CLOSING IS ALWAYS THE FULL POSITION SIZE.
+# HOW MANY LOTS TO BUY OR SELL AT A TIME PER INTERVAL/SIGNAL - BOT WILL BUY SEVERAL TIMES IF THERE ARE MULTIPLE SIGNALS
 lotsPerTrade = 1
 
-### END ###
-
-tc = dict(enumerate(tfs, 0))
-ttc = int(len(tfs) - 1)
-tf = tc[0]
-cc = dict(enumerate(coins, 0))
-ccc = int(len(coins) - 1)
-coinName = cc[0]
-coin = str(f'{coinName}/USDT:USDT')
-lock = False
+### END OF CONFIG ###
 
 try:
-    from ta import trend, momentum, volatility
+    from ta import trend, momentum, volatility, volume
     from pandas import DataFrame as dataframe
     from ccxt import kucoinfutures as kucoin
     import time
@@ -41,7 +26,7 @@ except Exception:
     import sys
     subprocess.check_call(
         [sys.executable, "-m", "pip", "install", "ccxt", "pandas", "numpy", "ta", "datetime", "-U"])
-    from ta import trend, momentum, volatility
+    from ta import trend, momentum, volatility, volume
     from pandas import DataFrame as dataframe
     from ccxt import kucoinfutures as kucoin
     import time
@@ -53,7 +38,6 @@ exchange = kucoin({
     'secret': API_SECRET,
     'password': API_PASSWD
 })
-positions = exchange.fetch_positions()
 
 
 def getData(coin, tf):
@@ -79,6 +63,10 @@ def sma(close, w):
     return trend.sma_indicator(close, w)
 
 
+def vwap(h, l, c, v, w):
+    return volume.volume_weighted_average_price(h, l, c, v, w)
+
+
 class kc:
     def h(h, l, c):
         return volatility.keltner_channel_hband(h, l, c, 10)
@@ -90,38 +78,88 @@ class kc:
 class order:
     def buy():
         if side == 'short':
-            price = sma(c, 20).iloc[-1]
+            price = (exchange.fetch_order_book(coin)[
+                     'bids'][0][0] + exchange.fetch_order_book()['asks'][0][0])/2
             qty = contracts
             params = {'reduceOnly': True, 'closeOrder': True}
         else:
-            price = lowerBand
+            price = exchange.fetch_order_book(coin)['bids'][0][0]
             qty = lotsPerTrade
             params = {'leverage': leverage}
         print(
-            f'Buy order placed... for {coin}, {contracts} contracts at {pnl}%')
-        return exchange.create_limit_buy_order(coin, qty, price, params=params)
+            f'Buy order placed... for {coin}, {qty} contracts at {100*pnl}%')
+        try:
+            exchange.create_limit_buy_order(coin, qty, price, params=params)
+        except Exception as e:
+            print(e)
+        return
 
     def sell():
+        price = (exchange.fetch_order_book(coin)[
+                 'bids'][0][0] + exchange.fetch_order_book(coin)['asks'][0][0])/2
         if side == 'long':
-            price = sma(c, 20).iloc[-1]
             qty = contracts
             params = {'reduceOnly': True, 'closeOrder': True}
         else:
-            price = upperBand
             qty = lotsPerTrade
             params = {'leverage': leverage}
         print(
-            f'Sell order placed... for {coin}, {contracts} contracts at {pnl}%')
-        return exchange.create_limit_sell_order(coin, qty, price, params=params)
+            f'Sell order placed... for {coin}')
+        try:
+            exchange.create_limit_sell_order(coin, qty, price, params=params)
+        except Exception as e:
+            print(e)
+        return
 
+    def stopLimit():
+        if pnl > takeProfit or pnl < stopLoss:
+            price = (exchange.fetch_order_book()[
+                     'bids'][0][0] + exchange.fetch_order_book(coin)['asks'][0][0])/2
+            qty = contracts
+            params = {'reduceOnly': True, 'closeOrder': True}
+            print(f'Closed {coin}, {contracts} contracts at {pnl*100}%')
+            fac = 'buy' if side == 'short' else 'sell' if side == 'long' else None
+            try:
+                exchange.create_limit_order(
+                    coin, fac, qty, price, params=params)
+            except Exception as e:
+                print(e)
+        return
 
-def drop():
-    if side == 'long' and pnl < stopLoss:
-        return exchange.create_market_sell_order(coin, contracts, {
-            'reduceOnly': True, 'closeOrder': True})
-    elif side == 'short' and pnl < stopLoss:
-        return exchange.create_market_buy_order(coin, contracts, {
-            'reduceOnly': True, 'closeOrder': True})
+################################################################################
+def bot():
+    h = getData(coin, tf)['high']
+    l = getData(coin, tf)['low']
+    c = getData(coin, tf)['close']
+    o = getData(coin, tf)['open']
+    v = getData(coin, tf)['volume']
+    Close = c.iloc[-1]
+    High = h.iloc[-1]
+    Low = l.iloc[-1]
+    Open = o.iloc[-1]
+    lowerBand = kc.l(h, l, c).iloc[-1]
+    upperBand = kc.h(h, l, c).iloc[-1]
+    vw = vwap(h, l, c, v, 200).iloc[-1]
+    ma200 = sma(c, 200).iloc[-1]
+    ma20 = sma(c, 20).iloc[-1]
+    rsi14 = rsi(c, 14).iloc[-1]
+    print(f'{tf} {coin} {side} ... CONTRACTS: {contracts} ... TOTAL: {equity}')
+    
+    if High > upperBand and rsi14 > 70 and Open > (Close and ma200 and vw):
+        order.sell()
+
+    if High > upperBand and rsi14 < 70 and Close > (Open and ma200 and vw):
+        order.buy()
+
+    if Low < lowerBand and rsi14 > 30 and  Close < (Open and ma200 and vw):
+        order.sell()
+
+    if Low < lowerBand and rsi14 < 30 and Open < (Open and ma200 and vw):
+        order.buy()
+
+    order.sell() if side == 'long' and Low < ma20 else order.buy() if side == 'short' and High > ma20 else order.stopLimit()
+
+ ###############################################################################
 
 
 print('\n'*100, 'TRADE AT YOUR OWN RISK. CRYPTOCURRENCY FUTURES TRADES ARE NOT FDIC INSURED. RESULTS ARE NOT GUARANTEED. POSITIONS MAY LOSE VALUE SUDDENLY AND WITHOUT WARNING. POSITINOS ARE SUBJECT TO LIQUIDATION. THERE ARE RISKS ASSOCIATED WITH ALL FORMS OF TRADING. IF YOU DON\'T UNDERSTAND THAT, THEN YOU SHOULD NOT BE TRADING IN THE FIRST PLACE. THIS SOFTWARE IS DEVELOPED FOR MY OWN USE, AND IS NOT TO BE INTERPRETED AS FINANCIAL ADVICE.')
@@ -129,59 +167,28 @@ time.sleep(2)
 print('\n'*100, '...AND MOST OF ALL HAVE FUN!!\n')
 time.sleep(1)
 print('\n'*100)
-lock = False
+positions = exchange.fetch_positions()
+markets = exchange.load_markets()
+balance = exchange.fetch_balance({'currency': 'USDT'})['free']['USDT']
+equity = exchange.fetch_balance()['info']['data']['accountEquity']
 while True:
-    try:
-        exchange.load_markets()
-        balance = round(
-            exchange.fetch_balance()['info']['data']['accountEquity'], 2)
-        try:
-            exchange.cancel_all_orders()if len(
-                exchange.fetch_open_orders()) > 3 else time.sleep(1)
-            coin = positions[0]['symbol']
-            side = positions[0]['side']
-            contracts = positions[0]['contracts']
-            pnl = positions[0]['percentage']
-        except Exception:
-            exchange.cancel_all_orders()if len(
-                exchange.fetch_open_orders()) > 0 else time.sleep(1)
-            if lock == False:
+    movers = {}
+    tfs = ['1m', '5m', '15m']
+    for tf in tfs:
+        leverage = 20 if tf == '1m' else 15 if tf == '5m' else 10
+        for coin in exchange.load_markets():
+            if '/USDT:USDT' not in coin:
+                pass
+            movers[coin] = abs(coin['priceChgPct'])
+            if coin not in dict(enumerate(positions)).values():
+                contracts = 0
                 side = 'none'
                 pnl = 0
-                contracts = 0
-                ccc = ccc + 1
-                if ccc >= len(coins):
-                    ccc = 0
-                    ttc = ttc + 1
-                    if ttc >= len(tfs):
-                        ttc = 0
-                    tf = tc[ttc]
-                coinName = cc[ccc]
-                coin = str(f'{coinName}/USDT:USDT')
-        if tf == '1m':
-            leverage = 10
-        elif tf == '5m':
-            leverage = 5
-        else:
-            leverage = 2
-        print(
-            f'{tf} {coin} {side} ... CONTRACTS: {contracts} ... PNL: {round(100*pnl,2)}% ... TOTAL: {balance}')
-        h = getData(coin, tf)['high']
-        l = getData(coin, tf)['low']
-        c = getData(coin, tf)['close']
-        lowerBand = kc.l(h, l, c)
-        upperBand = kc.h(h, l, c)
-
-        if upperBand.iloc[-2] < c.iloc[-2] < sma(c, 200).iloc[-2] and c.iloc[-1] < upperBand.iloc[-1] < sma(c, 200).iloc[-2]:
-            lock = True if side != 'long' else False
-            order.sell()
-        if lowerBand.iloc[-2] > c.iloc[-1] > sma(c, 200).iloc[-2] and c.iloc[-1] > lowerBand.iloc[-1] > sma(c, 200).iloc[-1]:
-            lock = True if side != 'short' else False
-            order.buy()
-
-        order.sell() if side == 'long' and pnl < stopLoss or pnl > takeProfit else order.buy(
-        ) if side == 'short' and pnl < stopLoss or pnl > takeProfit else time.sleep(1)
-    except Exception as e:
-        exchange.cancel_all_orders()
-        print(e)
-        time.sleep(3)
+                bot()
+            else:
+                pos = {}
+                for i, v in enumerate(positions):
+                    side = v['side']
+                    contracts = v['contracts']
+                    pnl = v['percentage']
+                    bot()
