@@ -8,15 +8,15 @@ API_SECRET = ''
 API_PASSWD = ''
 
 # SPECIFY COINS TO TRADE HERE, OR TRADE ALL COINS BY SETTING TO: 'all'
-#coins = ['ETH', 'XRP', 'ETC', 'BTC', 'LUNC', 'JST']
-coins = 'all'
+coins = ['XRP', 'ETC', 'LUNC', 'LUNA']
+#coins = 'all'
 
 # THESE ARE RATIOS, NOT PERCENTS. [ 1 = 100% ][ 0.05 = 5% ][ 0.1 = 10% ] ETC...
 stopLoss = -0.03
 takeProfit = 0.1
 
 # REFER TO EXCHANGE FOR PRICING PER LOT
-lotsPerTrade = 10
+lotsPerTrade = 25
 
 ### END ###
 
@@ -83,22 +83,21 @@ class order:
         ask = exchange.fetch_order_book(coin)['asks'][0][0]
         if side == 'short':
             amount = contracts
-            params = {'leverage': leverage}
+            params = {'reduceOnly': True, 'closeOrder': True}
         if side != 'short':
             amount = lotsPerTrade
             params = {'leverage': leverage}
-
-        return exchange.create_limit_buy_order(coin, amount, ask, params=params)
+        exchange.create_limit_buy_order(coin, amount, ask, params=params)
 
     def sell(coin, contracts, side):
         bid = exchange.fetch_order_book(coin)['bids'][0][0]
         if side == 'long':
             amount = contracts
-            params = {'leverage': leverage}
+            params = {'reduceOnly': True, 'closeOrder': True}
         if side != 'long':
             amount = lotsPerTrade
             params = {'leverage': leverage}
-        return exchange.create_limit_sell_order(coin, amount, bid, params=params)
+        exchange.create_limit_sell_order(coin, amount, bid, params=params)
 
 
 def bot(coin, contracts, side, pnl):
@@ -106,8 +105,6 @@ def bot(coin, contracts, side, pnl):
     l = getData(coin, tf)['low']
     c = getData(coin, tf)['close']
     o = getData(coin, tf)['open']
-    v = getData(coin, tf)['volume']
-
     Close = c.iloc[-1]
     High = h.iloc[-1]
     Low = l.iloc[-1]
@@ -119,24 +116,27 @@ def bot(coin, contracts, side, pnl):
     invHammer = (Close < Open and abs(Close - Low) < abs(High - Open)) or (
         Close > Open and abs(Open - Low) < abs(High - Close))
 
-    lower20 = bb.l(c, 20, 2).iloc[-1]
-    upper20 = bb.h(c, 20, 2).iloc[-1]
     lower5 = bb.l(c, 5, 2).iloc[-1]
+
     upper5 = bb.h(c, 5, 2).iloc[-1]
+
+    lowerThin = bb.l(c, 20, 1).iloc[-1]
+    upperThin = bb.h(c, 20, 1).iloc[-1]
+
     sma200 = sma(c, 200).iloc[-1]
 
     try:
-        if Low < lower5 and (Close > sma200 or side == 'short'):
+        if Close > sma200 and Close > upperThin:
             order.buy(coin, contracts, side)
 
-        if High > upper5 and (Close < sma200 or side == 'long'):
+        if Close < sma200 and Close < lowerThin:
             order.sell(coin, contracts, side)
 
-        if High > upper20 and invHammer and (Close < sma200 or side == 'long'):
-            order.sell(coin, contracts, side)
-
-        if Low < lower20 and hammer and (Close > sma200 or side == 'short'):
+        if hammer and Low < lower5:
             order.buy(coin, contracts, side)
+
+        if invHammer and High > upper5:
+            order.sell(coin, contracts, side)
 
     except Exception as e:
         print(e)
@@ -172,15 +172,15 @@ while True:
                         pnl = positions[i]['percentage']
                         if pnl < stopLoss or pnl > takeProfit:
                             if side == 'long':
-                                order.sell(coin, contracts)
+                                order.sell(coin, contracts, side)
                             elif side == 'short':
-                                order.buy(coin, contracts)
+                                order.buy(coin, contracts, side)
                         print(f'{tf} {coin} TOTAL: {equity}')
                         bot(coin, contracts, side, pnl)
         else:
             for symbol in coins:
-                coin = str(symbol+'/USDT:USDT')
-                if coin not in dict(enumerate(positions)).values():
+                coin = str(f'{symbol}/USDT:USDT')
+                if coin not in dict(positions[0]).values():
                     contracts = 0
                     side = 'none'
                     pnl = 0
@@ -193,9 +193,9 @@ while True:
                         pnl = v['percentage']
                         if pnl < stopLoss or pnl > takeProfit:
                             if side == 'long':
-                                order.sell(coin, contracts)
+                                order.sell(coin, contracts, side)
                             elif side == 'short':
-                                order.buy(coin, contracts)
+                                order.buy(coin, contracts, side)
                         print(f'{tf} {coin} TOTAL: {equity}')
                         bot(coin, contracts, side, pnl)
 
