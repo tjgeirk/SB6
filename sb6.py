@@ -126,18 +126,18 @@ while True:
         balance = exchange.fetch_balance({'currency': 'USDT'})['free']['USDT']
         equity = exchange.fetch_balance()['info']['data']['accountEquity']
         leverage = 20 if tf == '1m' else 15 if tf == '5m' else 10
-        try:
-            for i, symbol in enumerate(coins):
-                coin = str(f'{symbol}/USDT:USDT')
+        for i, symbol in enumerate(coins):
+            coin = str(f'{symbol}/USDT:USDT')
+            try:
                 pos = positions[i]
                 pnl = pos['percentage']
                 side = pos['side']
                 contracts = pos['contracts']
                 print(f'{tf} {coin} {side} {contracts} {pnl}% TOTAL: {equity}')
                 bot()
-        except Exception:
-            pnl = 0
-            side = 'none'
-            contracts = 0
-            print(f'{tf} {coin} {side} {contracts} {pnl}% TOTAL: {equity}')
-            bot()
+            except Exception:
+                pnl = 0
+                side = 'none'
+                contracts = 0
+                print(f'{tf} {coin} {side} {contracts} {pnl}% TOTAL: {equity}')
+                bot()
