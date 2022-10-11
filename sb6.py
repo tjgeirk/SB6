@@ -106,8 +106,8 @@ def bot(coin, contracts, side, pnl):
     invHammer = (Close < Open and abs(Close - Low) < abs(High - Open)) or (
         Close > Open and abs(Open - Low) < abs(High - Close))
 
-    lower20 = bb.l(c, 20, 2).iloc[-1]
-    upper20 = bb.h(c, 20, 2).iloc[-1]
+    lowerBand = bb.l(c, 20, 2).iloc[-1]
+    upperBand = bb.h(c, 20, 2).iloc[-1]
     lower5 = bb.l(c, 5, 2).iloc[-1]
     upper5 = bb.h(c, 5, 2).iloc[-1]
     sma200 = sma(c, 200).iloc[-1]
@@ -119,13 +119,10 @@ def bot(coin, contracts, side, pnl):
         if High > upper5 and (Close < sma200 or side == 'long'):
             order.sell(coin, contracts, side)
 
-        if side == 'long' and High > upper20 or upper5:
+        if High > upperBand and invHammer and (Close < sma200 or side == 'long'):
             order.sell(coin, contracts, side)
 
-        if High > upper20 and invHammer and (Close < sma200 or side == 'long'):
-            order.sell(coin, contracts, side)
-
-        if Low < lower20 and hammer and (Close > sma200 or side == 'short'):
+        if Low < lowerBand and hammer and (Close > sma200 or side == 'short'):
             order.buy(coin, contracts, side)
 
     except Exception as e:
