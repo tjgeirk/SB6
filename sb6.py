@@ -82,60 +82,62 @@ while True:
                 params = {'leverage': leverage}
             return exchange.create_limit_sell_order(coin, amount, bid, params=params)
 
-    positions = exchange.fetch_positions()
-    balance = exchange.fetch_balance({'currency': 'USDT'})['free']['USDT']
-    equity = exchange.fetch_balance()['info']['data']['accountEquity']
     tfs = ['1m', '5m', '15m']
 
-    for tf in tfs:
-        for symbol in coins:
-            coin = str(f'{symbol}/USDT:USDT')
-            for i, v in enumerate(positions):
-                if v['symbol'] == coin:
-                    x = positions[i]
-                    pnl = x['percentage']
-                    side = x['side']
-                    contracts = x['contracts']
-                else:
-                    pnl = 0
-                    side = 'none'
-                    contracts = 0
-            leverage = 20 if tf == '1m' else 15 if tf == '5m' else 10
-            print(f'{tf} {coin} {side} {contracts} {pnl}% TOTAL: {equity}')
+    def bot():
+        h = getData(coin, tf)['high']
+        l = getData(coin, tf)['low']
+        c = getData(coin, tf)['close']
+        o = getData(coin, tf)['open']
+        v = getData(coin, tf)['volume']
 
-            h = getData(coin, tf)['high']
-            l = getData(coin, tf)['low']
-            c = getData(coin, tf)['close']
-            o = getData(coin, tf)['open']
-            v = getData(coin, tf)['volume']
+        Close = c.iloc[-1]
+        High = h.iloc[-1]
+        Low = l.iloc[-1]
+        Open = o.iloc[-1]
 
-            Close = c.iloc[-1]
-            High = h.iloc[-1]
-            Low = l.iloc[-1]
-            Open = o.iloc[-1]
+        hammer = (Close < Open and abs(Close - Low) > abs(High - Open)) or (
+            Close > Open and abs(Open - Low) > abs(High - Close))
 
-            hammer = (Close < Open and abs(Close - Low) > abs(High - Open)) or (
-                Close > Open and abs(Open - Low) > abs(High - Close))
+        invHammer = (Close < Open and abs(Close - Low) < abs(High - Open)) or (
+            Close > Open and abs(Open - Low) < abs(High - Close))
 
-            invHammer = (Close < Open and abs(Close - Low) < abs(High - Open)) or (
-                Close > Open and abs(Open - Low) < abs(High - Close))
+        lowerband = bb.l(c, 20, 1).iloc[-1]
+        upperband = bb.h(c, 20, 1).iloc[-1]
+        sma10 = sma(c, 10).iloc[-1]
 
-            lowerband = bb.l(c, 20, 1).iloc[-1]
-            upperband = bb.h(c, 20, 1).iloc[-1]
-            sma10 = sma(c, 10).iloc[-1]
+        try:
+            if Open > upperband and invHammer and (side != 'long' or Low < sma10):
+                order.sell()
 
-            try:
-                if Open > upperband and invHammer and (side != 'long' or Low < sma10):
+            if Open < lowerband and hammer and (side != 'short' or High > sma10):
+                order.buy()
+
+            if pnl < stopLoss or pnl > takeProfit:
+                if side == 'long':
                     order.sell()
-
-                if Open < lowerband and hammer and (side != 'short' or High > sma10):
+                elif side == 'short':
                     order.buy()
 
-                if pnl < stopLoss or pnl > takeProfit:
-                    if side == 'long':
-                        order.sell()
-                    elif side == 'short':
-                        order.buy()
-
-            except Exception as e:
-                print(e)
+        except Exception as e:
+            print(e)
+    for tf in tfs:
+        positions = exchange.fetch_positions()
+        balance = exchange.fetch_balance({'currency': 'USDT'})['free']['USDT']
+        equity = exchange.fetch_balance()['info']['data']['accountEquity']
+        leverage = 20 if tf == '1m' else 15 if tf == '5m' else 10
+        try:
+            for i, symbol in enumerate(coins):
+                coin = str(f'{symbol}/USDT:USDT')
+                pos = positions[i]
+                pnl = pos['percentage']
+                side = pos['side']
+                contracts = pos['contracts']
+                print(f'{tf} {coin} {side} {contracts} {pnl}% TOTAL: {equity}')
+                bot()
+        except Exception:
+            pnl = 0
+            side = 'none'
+            contracts = 0
+            print(f'{tf} {coin} {side} {contracts} {pnl}% TOTAL: {equity}')
+            bot()
