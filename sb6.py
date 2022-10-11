@@ -145,48 +145,26 @@ while True:
     tfs = ['1m', '5m', '15m']
     for tf in tfs:
         leverage = 20 if tf == '1m' else 15 if tf == '5m' else 10
-        if coins == 'all':
-            for _, coin in enumerate(exchange.load_markets()):
-                if '/USDT:USDT' not in coin:
-                    pass
-                if coin not in dict(enumerate(positions)).values():
-                    contracts = 0
-                    side = 'none'
-                    pnl = 0
-                    print(f'{tf} {coin} TOTAL: {equity}')
+        for symbol in coins:
+            try:
+                for i,v in enumerate(positions):
+                    coin = v['symbol']
+                    pnl = v['percentage']
+                    contracts = v['contracts']
+                    side = v['side']
+                    if pnl < stopLoss or pnl > takeProfit:
+                        if side == 'long':
+                            order.sell(coin, contracts)
+                        elif side == 'short':
+                            order.buy(coin, contracts)
+                    print(f'{tf} {coin} {side} {contracts} {pnl}% TOTAL: {equity}')
                     bot(coin, contracts, side, pnl)
-                else:
-                    for i, v in enumerate(positions):
-                        side = positions[i]['side']
-                        contracts = positions[i]['contracts']
-                        pnl = positions[i]['percentage']
-                        if pnl < stopLoss or pnl > takeProfit:
-                            if side == 'long':
-                                order.sell(coin, contracts)
-                            elif side == 'short':
-                                order.buy(coin, contracts)
-                        print(f'{tf} {coin} TOTAL: {equity}')
-                        bot(coin, contracts, side, pnl)
-        else:
-            for symbol in coins:
+            except Exception as e:
                 coin = str(symbol+'/USDT:USDT')
-                if coin not in dict(enumerate(positions)).values():
-                    contracts = 0
-                    side = 'none'
-                    pnl = 0
-                    print(f'{tf} {coin} TOTAL: {equity}')
-                    bot(coin, contracts, side, pnl)
-                else:
-                    for i, v in enumerate(positions):
-                        side = v['side']
-                        contracts = v['contracts']
-                        pnl = v['percentage']
-                        if pnl < stopLoss or pnl > takeProfit:
-                            if side == 'long':
-                                order.sell(coin, contracts)
-                            elif side == 'short':
-                                order.buy(coin, contracts)
-                        print(f'{tf} {coin} TOTAL: {equity}')
-                        bot(coin, contracts, side, pnl)
+                pnl = 0
+                contracts = 0
+                side = 'none'
+                print(f'{tf} {coin} {side} {contracts} {pnl}% TOTAL: {equity}')
+                bot(coin, contracts, side, pnl)
 
         exchange.cancel_all_orders() if len(exchange.fetch_open_orders()) > 10 else 0
