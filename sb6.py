@@ -1,10 +1,3 @@
-import datetime
-import time
-from ccxt import kucoinfutures as kucoin
-from numpy import take
-from pandas import DataFrame as dataframe
-from ta import trend, momentum, volatility, volume
-
 API_KEY = ''
 API_SECRET = ''
 API_PASSWD = ''
@@ -12,8 +5,25 @@ API_PASSWD = ''
 coins = ['ETH', 'XRP', 'ETC', 'BTC', 'LUNC', 'LUNA']
 stopLoss = -0.03
 takeProfit = 0.1
-
 lotsPerTrade = 1
+
+try:
+    from ta import trend, momentum, volatility, volume
+    from pandas import DataFrame as dataframe
+    from ccxt import kucoinfutures as kucoin
+    import time
+    import datetime
+except Exception:
+    import subprocess
+    import sys
+    subprocess.check_call(
+        [sys.executable, "-m", "pip", "install", "ccxt", "pandas", "numpy", "ta", "datetime", "-U"])
+    from ta import trend, momentum, volatility, volume
+    from pandas import DataFrame as dataframe
+    from ccxt import kucoinfutures as kucoin
+    import time
+    import datetime
+
 
 exchange = kucoin({
     'adjustForTimeDifference': True,
