@@ -1,6 +1,5 @@
 import datetime
 import time
-import talib
 from ta import trend, momentum, volatility
 from pandas import DataFrame as dataframe
 from ccxt import kucoinfutures as kucoin
@@ -12,7 +11,7 @@ API_PASSWD = ''
 coins = ['ETH', 'XRP', 'ETC', 'BTC', 'LUNC', 'LUNA']
 stopLoss = -0.03
 takeProfit = 0.1
-tf = '15m'
+tf = '1h'
 lotsPerTrade = 1
 
 exchange = kucoin({
@@ -28,79 +27,81 @@ time.sleep(1)
 print('\n'*100, '...AND MOST OF ALL HAVE FUN!!\n')
 time.sleep(1)
 print('\n'*100)
+exchange.load_markets()
+
+
+def getData(coin, tf):
+    data = exchange.fetch_ohlcv(coin, tf, limit=500)
+    df = {}
+    for i, col in enumerate(['date', 'open', 'high', 'low', 'close',
+                            'volume']):
+        df[col] = []
+        for row in data:
+            if col == 'date':
+                df[col].append(
+                    datetime.datetime.fromtimestamp(row[i] / 1000))
+            else:
+                df[col].append(row[i])
+        DF = dataframe(df)
+    return DF
+
+
+def rsi(w):
+    return momentum.rsi(getData(coin, tf)['close'], w).iloc[-1]
+
+
+def sma(w):
+    return trend.sma_indicator(getData(coin, tf)['close'], w).iloc[-1]
+
+
+def ema(w):
+    return trend.ema_indicator(getData(coin, tf)['close'], w).iloc[-1]
+
+
+class bb:
+    def h():
+        return volatility.bollinger_hband(getData(coin, tf)['close'], 20, 2).iloc[-1]
+
+    def l():
+        return volatility.bollinger_lband(getData(coin, tf)['close'], 20, 2).iloc[-1]
+
+
+class order:
+    def buy():
+        ask = exchange.fetch_order_book(coin)['bids'][0][0]
+        if side == 'short':
+            amount = contracts
+            params = {'reduceOnly': True, 'closeOrder': True}
+        if side != 'short':
+            amount = lotsPerTrade
+            params = {'leverage': leverage}
+
+        return exchange.create_limit_buy_order(coin, amount, ask, params=params)
+
+    def sell():
+        bid = exchange.fetch_order_book(coin)['asks'][0][0]
+        if side == 'long':
+            amount = contracts
+            params = {'reduceOnly': True, 'closeOrder': True}
+        if side != 'long':
+            amount = lotsPerTrade
+            params = {'leverage': leverage}
+        return exchange.create_limit_sell_order(coin, amount, bid, params=params)
+
 
 while True:
-    exchange.load_markets()
-
-    def getData(coin, tf):
-        data = exchange.fetch_ohlcv(coin, tf, limit=500)
-        df = {}
-        for i, col in enumerate(['date', 'open', 'high', 'low', 'close',
-                                'volume']):
-            df[col] = []
-            for row in data:
-                if col == 'date':
-                    df[col].append(
-                        datetime.datetime.fromtimestamp(row[i] / 1000))
-                else:
-                    df[col].append(row[i])
-            DF = dataframe(df)
-        return DF
-
-    def rsi(w):
-        return momentum.rsi(getData(coin, tf)['close'], w).iloc[-1]
-
-    def sma(w):
-        return trend.sma_indicator(getData(coin, tf)['close'], w).iloc[-1]
-
-    def ema(w):
-        return trend.ema_indicator(getData(coin, tf)['close'], w).iloc[-1]
-
-    class bb:
-        def h():
-            return volatility.bollinger_hband(getData(coin, tf)['close'], 20, 2).iloc[-1]
-
-        def l():
-            return volatility.bollinger_lband(getData(coin, tf)['close'], 20, 2).iloc[-1]
-
-    class order:
-        def buy():
-            ask = exchange.fetch_order_book(coin)['bids'][0][0]
-            if side == 'short':
-                amount = contracts
-                params = {'reduceOnly': True, 'closeOrder': True}
-            if side != 'short':
-                amount = lotsPerTrade
-                params = {'leverage': leverage}
-
-            return exchange.create_limit_buy_order(coin, amount, ask, params=params)
-
-        def sell():
-            bid = exchange.fetch_order_book(coin)['asks'][0][0]
-            if side == 'long':
-                amount = contracts
-                params = {'reduceOnly': True, 'closeOrder': True}
-            if side != 'long':
-                amount = lotsPerTrade
-                params = {'leverage': leverage}
-            return exchange.create_limit_sell_order(coin, amount, bid, params=params)
-
     positions = exchange.fetch_positions()
     balance = exchange.fetch_balance({'currency': 'USDT'})['free']['USDT']
     equity = exchange.fetch_balance()['info']['data']['accountEquity']
 
     for symbol in coins:
         coin = str(f'{symbol}/USDT:USDT')
-        for i, v in enumerate(positions):
-            if v['symbol'] == coin:
-                x = positions[i]
-                pnl = x['percentage']
-                side = x['side']
-                contracts = x['contracts']
-            else:
-                pnl = 0
-                side = 'none'
-                contracts = 0
+        pnl = side = contracts = 0
+        for i in positions[0:]:
+            if coin == i['symbol']:
+                pnl = i['percentage']
+                side = i['side']
+                contracts = i['contracts']
         leverage = 20 if tf == '1m' else 15 if tf == '5m' else 10
         print(f'{tf} {coin} {side} {contracts} {pnl}% TOTAL: {equity}')
 
@@ -117,30 +118,17 @@ while True:
         macd = ema(12) - ema(26)
         signal = ema(9)
         try:
-            candle_names = talib.get_function_groups()['Pattern Recognition']
-            bear = bull = 0
-            for candle in candle_names:
-                if getattr(talib, candle)(o, h, l, c).iloc[-1] < 0:
-                    bear += 1
-                    print('bear: ', bear)
-                elif getattr(talib, candle)(o, h, l, c).iloc[-1] > 0:
-                    bull += 1
-                    print('bull: ', bull)
-            
-
-            if High > bb.h() and bear > bull and (side != 'long' or Close < ema(8)):
+            if High > bb.h() and Close < ema(8):
                 order.sell()
 
-            if Low < bb.l() and bull > bear and (side != 'short' or Close > ema(8)):
+            if Low < bb.l() and Close > ema(8):
                 order.buy()
 
-            if signal > macd and High > bb.h() and Close < ema(8):
+            if signal > macd and Close < ema(8):
                 order.sell()
 
-            if signal < macd and Low < bb.l() and Close > ema(8):
+            if signal < macd and Close > ema(8):
                 order.buy()
-
-
 
             if pnl < stopLoss or pnl > takeProfit:
                 if side == 'long':
@@ -150,3 +138,14 @@ while True:
 
         except Exception as e:
             print(e)
+
+#    import talib
+#    candle_names = talib.get_function_groups()['Pattern Recognition']
+#    bear = bull = 0
+#    for candle in candle_names:
+#        if getattr(talib, candle)(o, h, l, c).iloc[-1] < 0:
+#            bear += 1
+#            print('bear: ', bear)
+#        elif getattr(talib, candle)(o, h, l, c).iloc[-1] > 0:
+#            bull += 1
+#            print('bull: ', bull)
