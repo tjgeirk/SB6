@@ -1,3 +1,10 @@
+import datetime
+import time
+import talib
+from ta import trend, momentum, volatility
+from pandas import DataFrame as dataframe
+from ccxt import kucoinfutures as kucoin
+
 API_KEY = ''
 API_SECRET = ''
 API_PASSWD = ''
@@ -5,25 +12,8 @@ API_PASSWD = ''
 coins = ['ETH', 'XRP', 'ETC', 'BTC', 'LUNC', 'LUNA']
 stopLoss = -0.03
 takeProfit = 0.1
+tf = '15m'
 lotsPerTrade = 1
-
-try:
-    from ta import trend, momentum, volatility, volume
-    from pandas import DataFrame as dataframe
-    from ccxt import kucoinfutures as kucoin
-    import time
-    import datetime
-except Exception:
-    import subprocess
-    import sys
-    subprocess.check_call(
-        [sys.executable, "-m", "pip", "install", "ccxt", "pandas", "numpy", "ta", "datetime", "-U"])
-    from ta import trend, momentum, volatility, volume
-    from pandas import DataFrame as dataframe
-    from ccxt import kucoinfutures as kucoin
-    import time
-    import datetime
-
 
 exchange = kucoin({
     'adjustForTimeDifference': True,
@@ -34,7 +24,7 @@ exchange = kucoin({
 
 
 print('\n'*100, 'TRADE AT YOUR OWN RISK. CRYPTOCURRENCY FUTURES TRADES ARE NOT FDIC INSURED. RESULTS ARE NOT GUARANTEED. POSITIONS MAY LOSE VALUE SUDDENLY AND WITHOUT WARNING. POSITINOS ARE SUBJECT TO LIQUIDATION. THERE ARE RISKS ASSOCIATED WITH ALL FORMS OF TRADING. IF YOU DON\'T UNDERSTAND THAT, THEN YOU SHOULD NOT BE TRADING IN THE FIRST PLACE. THIS SOFTWARE IS DEVELOPED FOR MY OWN USE, AND IS NOT TO BE INTERPRETED AS FINANCIAL ADVICE.')
-time.sleep(2)
+time.sleep(1)
 print('\n'*100, '...AND MOST OF ALL HAVE FUN!!\n')
 time.sleep(1)
 print('\n'*100)
@@ -57,18 +47,21 @@ while True:
             DF = dataframe(df)
         return DF
 
-    def rsi(close, w):
-        return momentum.rsi(close, w)
+    def rsi(w):
+        return momentum.rsi(getData(coin, tf)['close'], w).iloc[-1]
 
-    def sma(close, w):
-        return trend.sma_indicator(close, w)
+    def sma(w):
+        return trend.sma_indicator(getData(coin, tf)['close'], w).iloc[-1]
+
+    def ema(w):
+        return trend.ema_indicator(getData(coin, tf)['close'], w).iloc[-1]
 
     class bb:
-        def h(close, window, deviations):
-            return volatility.bollinger_hband(close, window, deviations)
+        def h():
+            return volatility.bollinger_hband(getData(coin, tf)['close'], 20, 2).iloc[-1]
 
-        def l(close, window, deviations):
-            return volatility.bollinger_lband(close, window, deviations)
+        def l():
+            return volatility.bollinger_lband(getData(coin, tf)['close'], 20, 2).iloc[-1]
 
     class order:
         def buy():
@@ -92,9 +85,25 @@ while True:
                 params = {'leverage': leverage}
             return exchange.create_limit_sell_order(coin, amount, bid, params=params)
 
-    tfs = ['1m', '5m', '15m']
+    positions = exchange.fetch_positions()
+    balance = exchange.fetch_balance({'currency': 'USDT'})['free']['USDT']
+    equity = exchange.fetch_balance()['info']['data']['accountEquity']
 
-    def bot():
+    for symbol in coins:
+        coin = str(f'{symbol}/USDT:USDT')
+        for i, v in enumerate(positions):
+            if v['symbol'] == coin:
+                x = positions[i]
+                pnl = x['percentage']
+                side = x['side']
+                contracts = x['contracts']
+            else:
+                pnl = 0
+                side = 'none'
+                contracts = 0
+        leverage = 20 if tf == '1m' else 15 if tf == '5m' else 10
+        print(f'{tf} {coin} {side} {contracts} {pnl}% TOTAL: {equity}')
+
         h = getData(coin, tf)['high']
         l = getData(coin, tf)['low']
         c = getData(coin, tf)['close']
@@ -105,23 +114,33 @@ while True:
         High = h.iloc[-1]
         Low = l.iloc[-1]
         Open = o.iloc[-1]
-
-        hammer = (Close < Open and abs(Close - Low) > abs(High - Open)) or (
-            Close > Open and abs(Open - Low) > abs(High - Close))
-
-        invHammer = (Close < Open and abs(Close - Low) < abs(High - Open)) or (
-            Close > Open and abs(Open - Low) < abs(High - Close))
-
-        lowerband = bb.l(c, 20, 1).iloc[-1]
-        upperband = bb.h(c, 20, 1).iloc[-1]
-        sma10 = sma(c, 10).iloc[-1]
-
+        macd = ema(12) - ema(26)
+        signal = ema(9)
         try:
-            if Open > upperband and invHammer and (side != 'long' or Low < sma10):
+            candle_names = talib.get_function_groups()['Pattern Recognition']
+            bear = bull = 0
+            for candle in candle_names:
+                if getattr(talib, candle)(o, h, l, c).iloc[-1] < 0:
+                    bear += 1
+                    print('bear: ', bear)
+                elif getattr(talib, candle)(o, h, l, c).iloc[-1] > 0:
+                    bull += 1
+                    print('bull: ', bull)
+            
+
+            if High > bb.h() and bear > bull and (side != 'long' or Close < ema(8)):
                 order.sell()
 
-            if Open < lowerband and hammer and (side != 'short' or High > sma10):
+            if Low < bb.l() and bull > bear and (side != 'short' or Close > ema(8)):
                 order.buy()
+
+            if signal > macd and High > bb.h() and Close < ema(8):
+                order.sell()
+
+            if signal < macd and Low < bb.l() and Close > ema(8):
+                order.buy()
+
+
 
             if pnl < stopLoss or pnl > takeProfit:
                 if side == 'long':
@@ -131,23 +150,3 @@ while True:
 
         except Exception as e:
             print(e)
-    for tf in tfs:
-        positions = exchange.fetch_positions()
-        balance = exchange.fetch_balance({'currency': 'USDT'})['free']['USDT']
-        equity = exchange.fetch_balance()['info']['data']['accountEquity']
-        leverage = 20 if tf == '1m' else 15 if tf == '5m' else 10
-        for i, symbol in enumerate(coins):
-            coin = str(f'{symbol}/USDT:USDT')
-            try:
-                pos = positions[i]
-                pnl = pos['percentage']
-                side = pos['side']
-                contracts = pos['contracts']
-                print(f'{tf} {coin} {side} {contracts} {pnl}% TOTAL: {equity}')
-                bot()
-            except Exception:
-                pnl = 0
-                side = 'none'
-                contracts = 0
-                print(f'{tf} {coin} {side} {contracts} {pnl}% TOTAL: {equity}')
-                bot()
