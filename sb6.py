@@ -12,7 +12,7 @@ coins = ['ETH', 'XRP', 'ETC', 'BTC', 'LUNC', 'LUNA']
 stopLoss = -0.03
 takeProfit = 0.1
 tf = '1h'
-lotsPerTrade = 1
+lotsPerTrade = 10
 
 exchange = kucoin({
     'adjustForTimeDifference': True,
@@ -21,14 +21,12 @@ exchange = kucoin({
     'password': API_PASSWD
 })
 
-
 print('\n'*100, 'TRADE AT YOUR OWN RISK. CRYPTOCURRENCY FUTURES TRADES ARE NOT FDIC INSURED. RESULTS ARE NOT GUARANTEED. POSITIONS MAY LOSE VALUE SUDDENLY AND WITHOUT WARNING. POSITINOS ARE SUBJECT TO LIQUIDATION. THERE ARE RISKS ASSOCIATED WITH ALL FORMS OF TRADING. IF YOU DON\'T UNDERSTAND THAT, THEN YOU SHOULD NOT BE TRADING IN THE FIRST PLACE. THIS SOFTWARE IS DEVELOPED FOR MY OWN USE, AND IS NOT TO BE INTERPRETED AS FINANCIAL ADVICE.')
 time.sleep(1)
 print('\n'*100, '...AND MOST OF ALL HAVE FUN!!\n')
 time.sleep(1)
 print('\n'*100)
 exchange.load_markets()
-
 
 def getData(coin, tf):
     data = exchange.fetch_ohlcv(coin, tf, limit=500)
@@ -45,18 +43,14 @@ def getData(coin, tf):
         DF = dataframe(df)
     return DF
 
-
 def rsi(w):
     return momentum.rsi(getData(coin, tf)['close'], w).iloc[-1]
-
 
 def sma(w):
     return trend.sma_indicator(getData(coin, tf)['close'], w).iloc[-1]
 
-
 def ema(w):
     return trend.ema_indicator(getData(coin, tf)['close'], w).iloc[-1]
-
 
 class bb:
     def h():
@@ -64,7 +58,6 @@ class bb:
 
     def l():
         return volatility.bollinger_lband(getData(coin, tf)['close'], 20, 2).iloc[-1]
-
 
 class order:
     def buy():
@@ -87,7 +80,6 @@ class order:
             amount = lotsPerTrade
             params = {'leverage': leverage}
         return exchange.create_limit_sell_order(coin, amount, bid, params=params)
-
 
 while True:
     positions = exchange.fetch_positions()
@@ -118,24 +110,20 @@ while True:
         macd = ema(12) - ema(26)
         signal = ema(9)
         try:
-            if High > bb.h() and Close < ema(8):
-                order.sell()
-
-            if Low < bb.l() and Close > ema(8):
-                order.buy()
-
-            if signal > macd and Close < ema(8):
-                order.sell()
-
-            if signal < macd and Close > ema(8):
-                order.buy()
-
-            if pnl < stopLoss or pnl > takeProfit:
-                if side == 'long':
-                    order.sell()
-                elif side == 'short':
+            if sma(200) < Close or side == 'short':
+                if Open < bb.l() and Close > ema(8):
                     order.buy()
-
+                if signal < macd and Close > ema(8):
+                    order.buy()  
+                if pnl < stopLoss or pnl > takeProfit:
+                    order.buy()
+            if sma(200) > Close or side == 'long':
+                if signal > macd and Close < ema(8):
+                    order.sell()
+                if Open > bb.h() and Close < ema(8):
+                    order.sell()
+                if pnl < stopLoss or pnl > takeProfit:
+                    order.sell()
         except Exception as e:
             print(e)
 
