@@ -100,10 +100,10 @@ def bot():
         order('buy')
     elif Open > bb.h(20, 1) and Close < Open:
         order('sell')
-    elif macd(8, 13, 5) > 0 and Close > Open:
-        order('buy')
-    elif macd(8, 13, 5) < 0 and Close < Open:
+    if side == 'long' and Close < Open and lastClose < lastOpen:
         order('sell')
+    if side == 'short' and Close > Open and lastClose > lastOpen:
+        order('buy')
 
 
 while True:
@@ -114,44 +114,40 @@ while True:
                  getData(coin, TF)['high'].iloc[-1] +
                  getData(coin, TF)['low'].iloc[-1] +
                  getData(coin, TF)['close'].iloc[-1])/4
+        lastOpen = (getData(coin, TF)['close'].iloc[-3] +
+                    getData(coin, TF)['open'].iloc[-3])/2
+        lastClose = (getData(coin, TF)['open'].iloc[-2] +
+                     getData(coin, TF)['high'].iloc[-2] +
+                     getData(coin, TF)['low'].iloc[-2] +
+                     getData(coin, TF)['close'].iloc[-2])/4
         High = getData(coin, TF)['high'].iloc[-1]
+        Low = getData(coin, TF)['low'].iloc[-1]
+
         try:
-            for ii,i in enumerate(positions):
+            for ii, i in enumerate(positions):
                 if coin == i['symbol']:
                     pnl = i['percentage']
                     side = i['side']
                     contracts = i['contracts']
-                    if pnl > trail:
-                        trail = pnl
-                        stop = trail - abs(STOPLOSS)
-                        print(
-                            f'TRAIL: {round(trail*100,2)}% -- STOP: {round(stop*100, 2)}%')
-                    if pnl <= stop:
-                        if side == 'long':
-                            order('sell')
-                        if side == 'short':
-                            order('buy')
-                    print(
-                        f'{TF} {coin} {side} {contracts} {round((100*pnl),2)}% TOTAL: {equity}')
-                    bot()
         except Exception:
             pnl = 0.0
             contracts = 0
             side = 'none'
             trail = 0
-            if pnl > trail:
-                trail = pnl
-            stop = trail - abs(STOPLOSS)
-            print(
-                f'TRAIL: {round(trail*100,2)}% -- STOP: {round(stop*100, 2)}%')
-            if pnl <= stop:
-                if side == 'long':
-                    order('sell')
-                if side == 'short':
-                    order('buy')
-            print(
-                f'{TF} {coin} {side} {contracts} {round((100*pnl),2)}% TOTAL: {equity}')
-            bot()
+
+        if pnl > trail:
+            trail = pnl
+        stop = trail - abs(STOPLOSS)
+        print(
+            f'TRAIL: {round(trail*100,2)}% -- STOP: {round(stop*100, 2)}%')
+        if pnl <= stop:
+            if side == 'long':
+                order('sell')
+            if side == 'short':
+                order('buy')
+        print(
+            f'{TF} {coin} {side} {contracts} {round((100*pnl),2)}% TOTAL: {equity}')
+        bot()
     except Exception as e:
         print(e)
         time.sleep(10)
