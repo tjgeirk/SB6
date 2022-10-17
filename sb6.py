@@ -12,8 +12,8 @@ API_PASSWD = ''
 SYMBOL = 'ETC'
 STOPLOSS = 0.02
 TAKEPROFIT = 0.05
-TF = '1m'
-LEVERAGE = 20
+TF = '5m'
+LEVERAGE = 50
 LOTSPERTRADE = 1000
 
 exchange = kucoin({
@@ -123,30 +123,31 @@ while True:
         High = getData(coin, TF)['high'].iloc[-1]
         Low = getData(coin, TF)['low'].iloc[-1]
 
-        try:
-            for ii, i in enumerate(positions):
-                if coin == i['symbol']:
-                    pnl = i['percentage']
-                    side = i['side']
-                    contracts = i['contracts']
-        except Exception:
-            pnl = 0.0
-            contracts = 0
-            side = 'none'
-            trail = 0
-
+        pnl = 0.0
+        contracts = 0
+        side = 'none'
+        for i in positions:
+            if coin == i['symbol']:
+                pnl = i['percentage']
+                side = i['side']
+                contracts = i['contracts']
+            else:
+                pnl = 0.0
+                contracts = 0
+                side = 'none'
+                trail = 0
+                
         if pnl > trail:
             trail = pnl
-        stop = trail - abs(STOPLOSS)
-        print(
-            f'TRAIL: {round(trail*100,2)}% -- STOP: {round(stop*100, 2)}%')
+            stop = trail - abs(STOPLOSS)
+            print(f'TRAIL: {round(trail*100,2)}% -- STOP: {round(stop*100, 2)}%')
         if pnl <= stop:
             if side == 'long':
                 order('sell')
             if side == 'short':
                 order('buy')
-        print(
-            f'{TF} {coin} {side} {contracts} {round((100*pnl),2)}% TOTAL: {equity}')
+        print(f'{TF} {coin} {side} {contracts} {round((100*pnl),2)}% TOTAL: {equity}')
+        
         bot()
     except Exception as e:
         print(e)
